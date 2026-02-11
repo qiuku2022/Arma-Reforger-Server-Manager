@@ -1,0 +1,31 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "后端 (Go)",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/backend",
+            "cwd": "${workspaceFolder}/backend",
+            "env": {},
+            "args": []
+        },
+        {
+            "name": "前端 (Vite Dev)",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/frontend",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": ["run", "dev"],
+            "console": "integratedTerminal"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "全栈调试",
+            "configurations": ["后端 (Go)", "前端 (Vite Dev)"],
+            "stopAll": true
+        }
+    ]
+}
