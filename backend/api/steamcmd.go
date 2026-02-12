@@ -6,12 +6,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"arsm/config"
 	"arsm/models"
 	"arsm/ws"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -23,6 +23,9 @@ func execAndStream(cmd *exec.Cmd) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
+
+	// Windows 隐藏控制台窗口
+	hideWindow(cmd)
 
 	// 异步读取 stdout
 	go func() {
@@ -70,29 +73,36 @@ func InstallSteamCMD(c *gin.Context) {
 	cfg := config.Get()
 
 	// 创建目录
-	if err := os.MkdirAll(cfg.SteamCMDPath, 0755); err != nil {
-		fail(c, "创建目录失败: "+err.Error())
+	var mkdirErr error
+	if runtime.GOOS == "windows" {
+		mkdirErr = os.MkdirAll(cfg.SteamCMDPath, 0755)
+	} else {
+		mkdirErr = os.MkdirAll(cfg.SteamCMDPath, 0755)
+	}
+	if mkdirErr != nil {
+		fail(c, "创建目录失败: "+mkdirErr.Error())
 		return
 	}
 
 	var cmd *exec.Cmd
+
 	if runtime.GOOS == "windows" {
 		ws.Broadcast("开始下载 SteamCMD (Windows)...")
-		script := `
-			$url = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip"
-			$zip = "$env:TEMP\steamcmd.zip"
-			Invoke-WebRequest -Uri $url -OutFile $zip
-			Expand-Archive -Path $zip -DestinationPath "` + cfg.SteamCMDPath + `" -Force
-			Remove-Item $zip
-		`
-		cmd = exec.Command("powershell", "-Command", script)
+		// 使用 -ExecutionPolicy Bypass 绕过策略限制
+		// 使用 -UseBasicParsing 兼容没有 IE 的环境
+		script := `$ProgressPreference = 'SilentlyContinue'
+$url = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip"
+$zip = "$env:TEMP\steamcmd.zip"
+Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+Expand-Archive -Path $zip -DestinationPath "` + cfg.SteamCMDPath + `" -Force
+Remove-Item $zip`
+		cmd = exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-Command", script)
+		hideWindow(cmd)
 	} else {
 		ws.Broadcast("开始下载 SteamCMD (Linux)...")
-		script := `
-			cd "` + cfg.SteamCMDPath + `" && \
-			curl -sqL "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz" | tar zxvf - && \
-			chmod +x steamcmd.sh
-		`
+		script := `cd "` + cfg.SteamCMDPath + `" && \
+curl -sqL "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz" | tar zxvf - && \
+chmod +x steamcmd.sh`
 		cmd = exec.Command("bash", "-c", script)
 	}
 
@@ -111,9 +121,11 @@ func UpdateSteamCMD(c *gin.Context) {
 	ws.Broadcast("开始更新 SteamCMD...")
 
 	var cmd *exec.Cmd
+
 	if runtime.GOOS == "windows" {
 		executable := filepath.Join(cfg.SteamCMDPath, "steamcmd.exe")
 		cmd = exec.Command(executable, "+login", "anonymous", "+quit")
+		hideWindow(cmd)
 	} else {
 		executable := filepath.Join(cfg.SteamCMDPath, "steamcmd.sh")
 		cmd = exec.Command(executable, "+login", "anonymous", "+quit")
@@ -162,15 +174,62 @@ func GetServerStatus(c *gin.Context) {
 	}
 
 	// 检查进程是否运行
-	if runtime.GOOS == "windows" {
-		out, _ := exec.Command("tasklist", "/FI", "IMAGENAME eq ArmaReforgerServer.exe").Output()
-		status.Running = strings.Contains(string(out), "ArmaReforgerServer.exe")
-	} else {
-		out, _ := exec.Command("pgrep", "-f", "ArmaReforgerServer").Output()
-		status.Running = len(strings.TrimSpace(string(out))) > 0
-	}
+	status.Running = isProcessRunning()
 
 	success(c, status)
+}
+
+// isProcessRunning 检查 Arma Reforger 服务端是否运行
+func isProcessRunning() bool {
+	if runtime.GOOS == "windows" {
+		// Windows: 使用 tasklist 查找进程
+		cmd := exec.Command("tasklist", "/FI", "IMAGENAME eq ArmaReforgerServer.exe", "/FO", "CSV", "/NH")
+		hideWindow(cmd)
+		out, err := cmd.Output()
+		if err != nil {
+			return false
+		}
+		return strings.Contains(string(out), "ArmaReforgerServer.exe")
+	} else {
+		// Linux: 使用 pgrep 查找进程
+		cmd := exec.Command("pgrep", "-f", "ArmaReforgerServer")
+		out, err := cmd.Output()
+		return err == nil && len(strings.TrimSpace(string(out))) > 0
+	}
+}
+
+// getProcessPID 获取 Arma Reforger 服务端 PID
+func getProcessPID() int {
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command("tasklist", "/FI", "IMAGENAME eq ArmaReforgerServer.exe", "/FO", "CSV", "/NH")
+		hideWindow(cmd)
+		out, err := cmd.Output()
+		if err != nil {
+			return 0
+		}
+		lines := strings.Split(string(out), "\n")
+		for _, line := range lines {
+			if strings.Contains(line, "ArmaReforgerServer.exe") {
+				// CSV 格式: "ArmaReforgerServer.exe","1234","..."
+				parts := strings.Split(line, "\",\"")
+				if len(parts) >= 2 {
+					pidStr := strings.Trim(parts[1], "\"")
+					pid, _ := strconv.Atoi(pidStr)
+					return pid
+				}
+			}
+		}
+		return 0
+	} else {
+		cmd := exec.Command("pgrep", "-f", "ArmaReforgerServer")
+		out, err := cmd.Output()
+		if err != nil {
+			return 0
+		}
+		pidStr := strings.TrimSpace(string(out))
+		pid, _ := strconv.Atoi(pidStr)
+		return pid
+	}
 }
 
 // InstallServer 安装游戏服务端
@@ -191,12 +250,17 @@ func InstallServer(c *gin.Context) {
 		steamcmd = filepath.Join(cfg.SteamCMDPath, "steamcmd.sh")
 	}
 
-	cmd := exec.Command(steamcmd,
+	cmd := exec.Command(
+		steamcmd,
 		"+force_install_dir", cfg.ServerPath,
 		"+login", "anonymous",
 		"+app_update", "1874900", "validate",
 		"+quit",
 	)
+
+	if runtime.GOOS == "windows" {
+		hideWindow(cmd)
+	}
 
 	if err := execAndStream(cmd); err != nil {
 		fail(c, "安装失败: "+err.Error())
