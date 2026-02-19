@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "users": {
+    "admin": {
+      "username": "admin",
+      "password_hash": "$2a$10$YUXFX3feJo.gSbyZHHxfEumZw7cSYv8/heS8p69SOxM0sC7ZpEkLC",
+      "role": "admin",
+      "created_at": 1771401846,
+      "last_login_at": 1771509100
+    }
+  }
+}
