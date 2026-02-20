@@ -1,0 +1,15 @@
+{
+    "go.goroot": "/usr/local/go",
+    "go.gopath": "${env:HOME}/go",
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "golang.go",
+    "[go]": {
+        "editor.defaultFormatter": "golang.go"
+    },
+    "[vue]": {
+        "editor.defaultFormatter": "Vue.volar"
+    },
+    "[typescript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    }
+}

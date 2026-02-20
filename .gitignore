@@ -1,0 +1,8 @@
+node_modules/
+dist/
+backend/static/
+backend/arsm
+backend/arsm.exe
+backend/arsm-linux-amd64
+backend/arsm-windows-amd64.exe
+release/

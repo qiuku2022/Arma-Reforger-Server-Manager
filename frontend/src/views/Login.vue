@@ -2,7 +2,7 @@
   <div class="login-container">
     <div class="login-box">
       <div class="login-header">
-        <span class="logo-icon">🎮</span>
+        <img src="/logo.png" alt="ARSM Logo" class="logo-icon" />
         <h1>ARSM</h1>
         <p>Arma Reforger Server Manager</p>
       </div>
@@ -153,9 +153,10 @@ async function handleLogin() {
 }
 
 .logo-icon {
-  font-size: 48px;
+  width: 48px;
+  height: 48px;
   display: block;
-  margin-bottom: 10px;
+  margin: 0 auto 15px auto;
 }
 
 .login-header h1 {
